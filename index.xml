@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>vibrantv&#39;s blog</title>
+    <link>https://vibrantv.github.io/</link>
+    <description>a blog for the internet of buzzing things</description>
+    <language>en</language>
+    <lastBuildDate>Sat, 25 Jan 2020 00:00:00 +0000</lastBuildDate>
+    <atom:link href="https://vibrantv.github.io/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Let&#39;s get ready to rumble!</title>
+      <link>https://vibrantv.github.io/lets-get-ready-to-rumble/</link>
+      <pubDate>Sat, 25 Jan 2020 00:00:00 +0000</pubDate>
+      <guid>https://vibrantv.github.io/lets-get-ready-to-rumble/</guid>
+      <description>&lt;p&gt;Or: First steps in sending commands from Linux to a BLE device using Rust.&lt;/p&gt;
+
+&lt;p&gt;A while back I stumbled across the &lt;a href=&#34;https://buttplug.io&#34;&gt;buttplug.io&lt;/a&gt; project.
+They aim to create an open sex toy control protocol specification and reference
+implementations. They support various types of sex toys and other vibrating
+peripherals, such as video game controller. Go check it out if you haven&amp;rsquo;t done
+so already!&lt;/p&gt;
+
+&lt;p&gt;So, a few days back I bought a Bluetooth Low Energy (BLE) capable toy.
+A &lt;a href=&#34;https://www.we-vibe.com/pivot&#34;&gt;Pivot&lt;/a&gt; by We-Vibe.&lt;/p&gt;
+
+&lt;p&gt;Since there is an ongoing effort to create a Rust reference implementation
+&lt;a href=&#34;https://github.com/buttplugio/buttplug-rs&#34;&gt;buttplug-rs&lt;/a&gt; and I want to learn
+Rust, I decided to start by first creating a minimal PoC and later see what
+else is possible with the framework. At the time of writing the buttplug-rs
+did not seem to have support for my device.&lt;/p&gt;
+
+&lt;p&gt;The mechanism to connect to BLE devices from buttplug-rs is based on
+&lt;a href=&#34;https://github.com/mwylde/rumble&#34;&gt;rumble&lt;/a&gt;, a Rust library abstraction for the
+BlueZ socket interface.&lt;/p&gt;
+
+&lt;p&gt;The rumble documentation has a simple usage example that shows how to control a
+BLE light bulb. In the following code I adapted the example to send a &amp;ldquo;start
+vibrating&amp;rdquo; commands to my device instead of &amp;ldquo;lights on&amp;rdquo; to a light bulb.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&#34;language-rust&#34;&gt;extern crate rumble;
+
+use rumble::api::{Central, Peripheral, UUID};
+use rumble::bluez::manager::Manager;
+use std::thread;
+use std::time::Duration;
+
+fn main() {
+    let manager = Manager::new().unwrap();
+
+    // get the first bluetooth adapter
+    let adapters = manager.adapters().unwrap();
+    let mut adapter = adapters.into_iter().nth(0).unwrap();
+
+    // reset the adapter -- clears out any errant state
+    adapter = manager.down(&amp;amp;adapter).unwrap();
+    adapter = manager.up(&amp;amp;adapter).unwrap();
+
+    // connect to the adapter
+    let central = adapter.connect().unwrap();
+
+    // start scanning for devices
+    central.start_scan().expect(&amp;quot;start scan failed&amp;quot;);
+    // instead of waiting, you can use central.on_event to be notified of
+    // new devices
+    thread::sleep(Duration::from_secs(2));
+
+    // find the device we&#39;re interested in
+    let device = central
+        .peripherals()
+        .into_iter()
+        .find(|p| {
+            p.properties()
+                .local_name
+                .iter()
+                .any(|name| name.contains(&amp;quot;Pivot&amp;quot;))
+        })
+        .expect(&amp;quot;could not find device..&amp;quot;);
+
+    println!(&amp;quot;device found.&amp;quot;);
+
+    // connect to the device
+    device.connect().expect(&amp;quot;unable to connect&amp;quot;);
+
+    // discover characteristics
+    device
+        .discover_characteristics()
+        .expect(&amp;quot;could not discover device&amp;quot;);
+
+    // https://github.com/buttplugio/buttplug-device-config contains the UUIDs we use here.
+    // The UUID byteorder is reversed in the definition below.
+    let tx_uuid = UUID::B128([
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xB0, 0x00, 0x40, 0x51, 0x04, 0x00, 0xC0, 0x00,
+        0xF0,
+    ]);
+    // find the characteristic we want
+    let tx_char = device
+        .characteristics()
+        .into_iter()
+        .find(|c| c.uuid == tx_uuid)
+        .expect(&amp;quot;could not find tx characteristic&amp;quot;);
+
+    // commands based on https://github.com/metafetish/wejibe-py
+    let oncmd = vec![0x0f, 0x05, 0x00, 0xbc, 0x00, 0x00, 0x00, 0x00];
+    let offcmd = vec![0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+
+    device.command(&amp;amp;tx_char, &amp;amp;oncmd).expect(&amp;quot;unable to send..&amp;quot;);
+    println!(&amp;quot;on&amp;quot;);
+    thread::sleep(Duration::from_millis(5000));
+    device.command(&amp;amp;tx_char, &amp;amp;offcmd).expect(&amp;quot;unable to send..&amp;quot;);
+    println!(&amp;quot;off&amp;quot;);
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Having a small program like this will probably be useful to quickly test out
+new commands on various devices without having to have a working buttplug-rs
+setup, yet.&lt;/p&gt;
+
+&lt;p&gt;For information on device specific protocols see
+&lt;a href=&#34;https://stpihkal.docs.buttplug.io/&#34;&gt;STPIHKAL&lt;/a&gt;.&lt;/p&gt;
+</description>
+    </item>
+  </channel>
+</rss>
